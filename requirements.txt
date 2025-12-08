@@ -1,0 +1,6 @@
+Django>=4.2,<5
+Pillow
+djangorestframework
+face-recognition
+numpy
+scikit-learn

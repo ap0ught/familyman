@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Photos</h1>
+<ul>
+  {% for photo in photos %}
+    <li>
+      <a href="{% url 'photos:photo_detail' photo.pk %}">{{ photo.title|default:photo.original_path }}</a>
+      {% if photo.taken_at %} — {{ photo.taken_at }}{% endif %}
+    </li>
+  {% empty %}
+    <li>No photos yet.</li>
+  {% endfor %}
+</ul>
+{% if is_paginated %}
+  <div>
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+  </div>
+{% endif %}
+{% endblock %}
