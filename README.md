@@ -24,6 +24,12 @@ Prerequisites
   - pip install face_recognition scikit-learn Pillow numpy
   - face_recognition requires dlib; follow installation instructions for your OS.
 
+## Running on Raspberry Pi
+For detailed instructions on running familyman on a Raspberry Pi (aarch64/ARM), see [README-pi.md](README-pi.md). A setup script is provided to automate the installation process:
+```bash
+./setup_pi.sh
+```
+
 Notes and limitations
 - Google does not export its internal face-recognition groupings or face embeddings in Takeout. These scripts attempt to recreate a local people index by detecting faces and clustering them using open-source models.
 - Clustering will not be perfect; manual review of cluster montages is recommended before writing names.

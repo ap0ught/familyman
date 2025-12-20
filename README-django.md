@@ -13,6 +13,8 @@ Quickstart (local)
 
 3. Run the dev server:
    - python manage.py runserver
+   - For network access (e.g., from other devices or Raspberry Pi): python manage.py runserver 0.0.0.0:8000
+   - Make sure to set FAMILYMAN_ALLOWED_HOSTS environment variable to allow network access
 
 4. Import a Google Takeout folder (dry-run first):
    - python manage.py import_takeout /path/to/unpacked_takeout --dry-run
@@ -22,5 +24,6 @@ Quickstart (local)
 Notes
 - This initial site stores original paths (it doesn't copy image files). To serve images via Django put or symlink your images under MEDIA_ROOT or adjust Photo model to use FileField and copy files into MEDIA_ROOT.
 - The import command reads per-photo JSON sidecars produced by Google Takeout and stores JSON into the Photo.json_metadata field for later processing.
+- For running on Raspberry Pi, see [README-pi.md](README-pi.md) for ARM-specific setup instructions.
 
 End of files.
