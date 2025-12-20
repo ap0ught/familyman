@@ -1,0 +1,21 @@
+[Unit]
+Description=FamilyMan Photo Manager
+After=network.target
+
+[Service]
+Type=notify
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/familyman
+Environment="FAMILYMAN_ALLOWED_HOSTS=*"
+Environment="FAMILYMAN_SECRET=change-me-to-a-secure-random-string"
+ExecStart=/home/pi/familyman/.venv/bin/gunicorn \
+    --workers 2 \
+    --bind 0.0.0.0:8000 \
+    --timeout 300 \
+    familyman_site.wsgi:application
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
