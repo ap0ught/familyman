@@ -101,26 +101,32 @@ echo "Step 6: Setting up environment variables..."
 if [ -f ".env" ]; then
     echo ".env file already exists. Skipping creation."
 else
+    # Generate a secure secret key
+    SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))' 2>/dev/null || echo "change-me-in-production")
+    
     cat > .env <<EOF
 # FamilyMan Environment Configuration for Raspberry Pi
-# Uncomment and modify as needed
+# Source this file before running: source .env
 
-# Allow access from network (use * for all, or specify IPs)
-export FAMILYMAN_ALLOWED_HOSTS="*"
+# Allow access from network (use * for all, or specify IPs like "192.168.1.100,localhost")
+FAMILYMAN_ALLOWED_HOSTS="*"
 
-# Generate a secure secret key for production
-# You can generate one with: python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
-export FAMILYMAN_SECRET="change-me-in-production"
+# Secure secret key for Django (CHANGE THIS IN PRODUCTION!)
+FAMILYMAN_SECRET="$SECRET_KEY"
 
 # Optional: Set media root for photos
-# export MEDIA_ROOT="/path/to/your/photos"
+# FAMILYMAN_MEDIA_ROOT="/path/to/your/photos"
 EOF
-    echo "Created .env file. Please review and update it with secure values."
+    echo "Created .env file with a generated secret key."
+    echo "IMPORTANT: Review and update FAMILYMAN_ALLOWED_HOSTS for security!"
 fi
 
 echo ""
 echo "Step 7: Initializing database..."
+# Load environment variables from .env
+set -a
 source .env 2>/dev/null || true
+set +a
 python manage.py migrate || {
     echo "Error: Database migration failed"
     exit 1
@@ -134,7 +140,7 @@ echo ""
 echo "Next steps:"
 echo ""
 echo "1. Load environment variables:"
-echo "   source .env"
+echo "   set -a && source .env && set +a"
 echo ""
 echo "2. Create a superuser for admin access:"
 echo "   python manage.py createsuperuser"
@@ -150,5 +156,5 @@ echo ""
 echo "To activate the virtual environment in future sessions:"
 echo "   cd $(pwd)"
 echo "   source .venv/bin/activate"
-echo "   source .env"
+echo "   set -a && source .env && set +a"
 echo ""

@@ -8,7 +8,7 @@ SECRET_KEY = os.environ.get("FAMILYMAN_SECRET", "change-me-in-prod")
 DEBUG = True
 
 # Allow access from any host when FAMILYMAN_ALLOWED_HOSTS is set, otherwise localhost only
-ALLOWED_HOSTS = os.environ.get("FAMILYMAN_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get("FAMILYMAN_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")]
 
 INSTALLED_APPS = [
     "django.contrib.admin",

@@ -100,10 +100,27 @@ export FAMILYMAN_SECRET="your-secure-random-secret-key-here"
 To make these permanent, add them to your `~/.bashrc` or create a `.env` file:
 
 ```bash
+# Add to ~/.bashrc for automatic loading
 echo 'export FAMILYMAN_ALLOWED_HOSTS="*"' >> ~/.bashrc
 echo 'export FAMILYMAN_SECRET="your-secret-key"' >> ~/.bashrc
 source ~/.bashrc
 ```
+
+Or create a `.env` file (without `export` keyword) and source it manually:
+
+```bash
+cat > .env <<EOF
+FAMILYMAN_ALLOWED_HOSTS="*"
+FAMILYMAN_SECRET="your-secure-random-secret-key-here"
+EOF
+
+# Load the environment variables
+set -a
+source .env
+set +a
+```
+
+**Note**: The `setup_pi.sh` script automatically creates a `.env` file with a generated secret key.
 
 ### 7. Initialize Database
 
@@ -148,16 +165,24 @@ Description=FamilyMan Photo Manager
 After=network.target
 
 [Service]
-Type=notify
+# NOTE: Customize User, Group, and WorkingDirectory paths to match your installation
+Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/familyman
-Environment="FAMILYMAN_ALLOWED_HOSTS=*"
+# SECURITY WARNING: Change these defaults before deploying to production!
+# - Set FAMILYMAN_ALLOWED_HOSTS to specific IPs/domains instead of "*"
+# - Generate a secure FAMILYMAN_SECRET with: python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
+# - Ensure DEBUG=False in production (set via environment or modify settings.py)
+Environment="FAMILYMAN_ALLOWED_HOSTS=localhost,127.0.0.1"
 Environment="FAMILYMAN_SECRET=your-secret-key"
 ExecStart=/home/pi/familyman/.venv/bin/gunicorn \
     --workers 2 \
-    --bind 0.0.0.0:8000 \
+    --bind 127.0.0.1:8000 \
+    --timeout 60 \
     familyman_site.wsgi:application
+Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
