@@ -1,6 +1,6 @@
 import hashlib
 from django.core.management.base import BaseCommand
-from django.db.models import Count
+from django.db.models import Count, Q
 from photos.models import Photo
 
 
@@ -34,7 +34,7 @@ class Command(BaseCommand):
 
         # First, compute hashes for photos that don't have them
         if compute_hashes:
-            photos_without_hash = Photo.objects.filter(file_hash="")
+            photos_without_hash = Photo.objects.filter(Q(file_hash='') | Q(file_hash__isnull=True))
             count_without_hash = photos_without_hash.count()
             
             if count_without_hash > 0:

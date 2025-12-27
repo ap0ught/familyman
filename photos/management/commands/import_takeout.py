@@ -141,9 +141,7 @@ class Command(BaseCommand):
                             continue
                         
                         # Check for duplicates in database
-                        existing_photo = None
-                        if file_hash:
-                            existing_photo = Photo.objects.filter(file_hash=file_hash).first()
+                        existing_photo = Photo.objects.filter(file_hash=file_hash).first()
                         
                         if existing_photo:
                             if duplicate_action == "skip":
