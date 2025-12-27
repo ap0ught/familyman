@@ -3,6 +3,7 @@ import json
 import shutil
 import zipfile
 import tempfile
+import hashlib
 from django.core.management.base import BaseCommand
 from photos.models import Photo
 from datetime import datetime
@@ -20,9 +21,24 @@ class Command(BaseCommand):
         parser.add_argument("takeout_root", help="Path to the root folder or zip file of the unpacked Google Takeout export")
         parser.add_argument("--dry-run", action="store_true", help="Don't write to DB; only report")
         parser.add_argument("--people-only", action="store_true", help="Only import photos with detected faces/people")
+        parser.add_argument("--duplicate-action", choices=["skip", "replace", "error"], default="skip", 
+                            help="How to handle duplicate photos (default: skip). 'skip' ignores duplicates, 'replace' updates existing records, 'error' stops on duplicates")
         parser.add_argument("--intake-dir", help="Directory for intake zip files (default: intake/)")
         parser.add_argument("--processed-dir", help="Directory for processed zip files (default: processed/)")
         parser.add_argument("--to-be-processed-dir", help="Directory for photos without people (default: to_be_processed/)")
+
+    def calculate_file_hash(self, file_path):
+        """Calculate SHA256 hash of a file for duplicate detection."""
+        sha256_hash = hashlib.sha256()
+        try:
+            with open(file_path, "rb") as f:
+                # Read in chunks to handle large files
+                for byte_block in iter(lambda: f.read(4096), b""):
+                    sha256_hash.update(byte_block)
+            return sha256_hash.hexdigest()
+        except Exception as e:
+            self.stderr.write(f"Error calculating hash for {file_path}: {e}")
+            return None
 
     def has_faces(self, image_path):
         """Detect if an image has any faces/people in it."""
@@ -39,6 +55,7 @@ class Command(BaseCommand):
         root = options["takeout_root"]
         dry = options["dry_run"]
         people_only = options["people_only"]
+        duplicate_action = options["duplicate_action"]
         
         # Setup directories
         base_dir = Path.cwd()
@@ -87,6 +104,8 @@ class Command(BaseCommand):
 
         count = 0
         skipped_no_faces = 0
+        skipped_duplicates = 0
+        replaced_duplicates = 0
         import_successful = True
         try:
             for dirpath, _, filenames in os.walk(root):
@@ -114,6 +133,31 @@ class Command(BaseCommand):
                                 else:
                                     self.stdout.write(f"[DRY][NO FACES] Would move to to_be_processed: {fname}")
                                 continue
+                        
+                        # Calculate file hash for duplicate detection
+                        file_hash = self.calculate_file_hash(image_path)
+                        if not file_hash:
+                            self.stderr.write(f"Skipping {fname} due to hash calculation error")
+                            continue
+                        
+                        # Check for duplicates in database
+                        existing_photo = None
+                        if file_hash:
+                            existing_photo = Photo.objects.filter(file_hash=file_hash).first()
+                        
+                        if existing_photo:
+                            if duplicate_action == "skip":
+                                skipped_duplicates += 1
+                                if dry:
+                                    self.stdout.write(f"[DRY][DUPLICATE] Would skip: {fname} (already in DB as Photo {existing_photo.id})")
+                                else:
+                                    self.stdout.write(f"[DUPLICATE] Skipping: {fname} (already in DB as Photo {existing_photo.id})")
+                                continue
+                            elif duplicate_action == "error":
+                                self.stderr.write(f"Error: Duplicate photo found: {fname} (already in DB as Photo {existing_photo.id})")
+                                import_successful = False
+                                break
+                            # If replace, we'll update the existing photo below
                         
                         json_path = os.path.join(dirpath, base + ".json")
                         doc = {}
@@ -147,18 +191,36 @@ class Command(BaseCommand):
                             except Exception:
                                 pass
                         if dry:
-                            self.stdout.write(f"[DRY] {image_path} taken_at={taken_at} lat={lat} lon={lon}")
+                            if existing_photo and duplicate_action == "replace":
+                                self.stdout.write(f"[DRY][REPLACE] Would update Photo {existing_photo.id}: {image_path}")
+                            else:
+                                self.stdout.write(f"[DRY] {image_path} taken_at={taken_at} lat={lat} lon={lon} hash={file_hash[:8]}...")
                         else:
-                            photo = Photo.objects.create(
-                                original_path=image_path,
-                                title=title,
-                                description=doc.get("description") or "",
-                                taken_at=taken_at,
-                                latitude=lat,
-                                longitude=lon,
-                                json_metadata=doc or None,
-                            )
-                            count += 1
+                            if existing_photo and duplicate_action == "replace":
+                                # Update existing photo
+                                existing_photo.original_path = image_path
+                                existing_photo.title = title
+                                existing_photo.description = doc.get("description") or ""
+                                existing_photo.taken_at = taken_at
+                                existing_photo.latitude = lat
+                                existing_photo.longitude = lon
+                                existing_photo.json_metadata = doc or None
+                                existing_photo.save()
+                                replaced_duplicates += 1
+                                self.stdout.write(f"[REPLACE] Updated Photo {existing_photo.id}: {fname}")
+                            else:
+                                # Create new photo
+                                photo = Photo.objects.create(
+                                    original_path=image_path,
+                                    file_hash=file_hash,
+                                    title=title,
+                                    description=doc.get("description") or "",
+                                    taken_at=taken_at,
+                                    latitude=lat,
+                                    longitude=lon,
+                                    json_metadata=doc or None,
+                                )
+                                count += 1
         except Exception as e:
             self.stderr.write(f"Error during import: {e}")
             import_successful = False
@@ -187,9 +249,17 @@ class Command(BaseCommand):
         
         if not dry:
             self.stdout.write(f"Imported {count} photos.")
+            if replaced_duplicates > 0:
+                self.stdout.write(f"Replaced {replaced_duplicates} duplicate photos.")
+            if skipped_duplicates > 0:
+                self.stdout.write(f"Skipped {skipped_duplicates} duplicate photos.")
             if people_only:
                 self.stdout.write(f"Skipped {skipped_no_faces} photos without faces.")
         else:
             self.stdout.write(f"[DRY] Would import {count} photos.")
+            if replaced_duplicates > 0:
+                self.stdout.write(f"[DRY] Would replace {replaced_duplicates} duplicate photos.")
+            if skipped_duplicates > 0:
+                self.stdout.write(f"[DRY] Would skip {skipped_duplicates} duplicate photos.")
             if people_only:
                 self.stdout.write(f"[DRY] Would skip {skipped_no_faces} photos without faces.")

@@ -28,12 +28,42 @@ This mode uses face detection to filter photos:
 - Photos without faces are moved to a `to_be_processed/` folder for later review
 - Processed zip files are moved to a `processed/` folder
 
+**Duplicate Handling**: Control what happens when duplicate photos are detected (based on file content hash):
+```bash
+# Skip duplicates (default behavior)
+python manage.py import_takeout /path/to/takeout.zip --duplicate-action skip
+
+# Replace existing photos with new metadata
+python manage.py import_takeout /path/to/takeout.zip --duplicate-action replace
+
+# Stop with error on duplicates
+python manage.py import_takeout /path/to/takeout.zip --duplicate-action error
+```
+
 **Options**:
 - `--dry-run` — Preview what would be imported without making changes
 - `--people-only` — Only import photos with detected faces
+- `--duplicate-action` — How to handle duplicates: `skip` (default), `replace`, or `error`
 - `--intake-dir` — Directory for intake zip files (default: `intake/`)
 - `--processed-dir` — Directory for processed zip files (default: `processed/`)
 - `--to-be-processed-dir` — Directory for photos without people (default: `to_be_processed/`)
+
+### Cleanup Duplicates Command
+Remove duplicate photos that are already in the database:
+
+```bash
+# Report duplicates without deleting
+python manage.py cleanup_duplicates --action report
+
+# Compute hashes for photos that don't have them yet
+python manage.py cleanup_duplicates --compute-hashes
+
+# Delete duplicates, keeping the oldest copy
+python manage.py cleanup_duplicates --action delete
+
+# Dry run to see what would be deleted
+python manage.py cleanup_duplicates --action delete --dry-run
+```
 
 Overview workflow:
 1. Create a Google Photos export using Google Takeout and download/unpack it.
