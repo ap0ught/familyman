@@ -13,3 +13,9 @@ venv/
 
 # ExifTool backup files
 *_original
+
+# Import directories
+intake/
+processed/
+to_be_processed/
+db.sqlite3

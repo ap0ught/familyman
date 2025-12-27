@@ -7,6 +7,34 @@ This repository contains helper scripts:
 - face_cluster_and_tag.py — scans images, detects faces, computes embeddings, clusters similar faces, and writes a clusters.csv plus montage images for manual review.
 - write_names_from_mapping.py — given a mapping from cluster_id -> person_name, writes the person name into images as a Keyword using exiftool.
 
+## Django Photo Management App
+The repository also includes a Django-based photo management application that provides a database for organizing and tracking imported photos.
+
+### Import Takeout Command
+The `import_takeout` management command imports Google Takeout photos into the Django database:
+
+```bash
+python manage.py import_takeout /path/to/takeout --dry-run
+python manage.py import_takeout /path/to/takeout.zip
+```
+
+**People-Only Mode**: Import only photos with detected faces/people:
+```bash
+python manage.py import_takeout /path/to/takeout.zip --people-only
+```
+
+This mode uses face detection to filter photos:
+- Photos with faces are imported into the database
+- Photos without faces are moved to a `to_be_processed/` folder for later review
+- Processed zip files are moved to a `processed/` folder
+
+**Options**:
+- `--dry-run` — Preview what would be imported without making changes
+- `--people-only` — Only import photos with detected faces
+- `--intake-dir` — Directory for intake zip files (default: `intake/`)
+- `--processed-dir` — Directory for processed zip files (default: `processed/`)
+- `--to-be-processed-dir` — Directory for photos without people (default: `to_be_processed/`)
+
 Overview workflow:
 1. Create a Google Photos export using Google Takeout and download/unpack it.
 2. Run merge_takeout_metadata.py to re-embed timestamp/location/description/keywords into the image files:
