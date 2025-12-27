@@ -32,6 +32,7 @@ class Command(BaseCommand):
             return len(face_locations) > 0
         except Exception as e:
             self.stderr.write(f"Error detecting faces in {image_path}: {e}")
+            self.stderr.write(f"Continuing with import - defaulting to including this photo")
             return True  # Default to True on error to avoid losing photos
 
     def handle(self, *args, **options):
@@ -64,6 +65,7 @@ class Command(BaseCommand):
                 root = temp_dir
             except Exception as e:
                 self.stderr.write(f"Failed to extract zip file: {e}")
+                self.stderr.write(f"The zip file may be corrupted or incomplete.")
                 if temp_dir and os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
                 return
@@ -77,6 +79,8 @@ class Command(BaseCommand):
         if people_only and face_recognition is None:
             self.stderr.write("Error: --people-only requires face_recognition library.")
             self.stderr.write("Install with: pip install face_recognition")
+            self.stderr.write("Note: face_recognition requires dlib and cmake. On Debian/Ubuntu:")
+            self.stderr.write("  sudo apt-get install build-essential cmake python3-dev")
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
             return
