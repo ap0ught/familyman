@@ -26,10 +26,6 @@ class Command(BaseCommand):
 
     def has_faces(self, image_path):
         """Detect if an image has any faces/people in it."""
-        if face_recognition is None:
-            self.stderr.write("Warning: face_recognition not installed. Install with: pip install face_recognition")
-            return True  # Default to True if face_recognition is not available
-        
         try:
             image = face_recognition.load_image_file(image_path)
             face_locations = face_recognition.face_locations(image, model='hog')
@@ -74,6 +70,8 @@ class Command(BaseCommand):
         
         if not os.path.isdir(root):
             self.stderr.write("Path not found: " + root)
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
             return
         
         if people_only and face_recognition is None:
@@ -85,83 +83,89 @@ class Command(BaseCommand):
 
         count = 0
         skipped_no_faces = 0
-        for dirpath, _, filenames in os.walk(root):
-            for fname in filenames:
-                base, ext = os.path.splitext(fname)
-                if ext.lower() in {".jpg", ".jpeg", ".png", ".heic", ".webp"}:
-                    image_path = os.path.join(dirpath, fname)
-                    
-                    # Check for faces if people_only mode is enabled
-                    has_people = True
-                    if people_only:
-                        has_people = self.has_faces(image_path)
-                        if not has_people:
-                            skipped_no_faces += 1
-                            # Move to to_be_processed folder
-                            if not dry:
-                                dest_path = to_be_processed_dir / fname
-                                # Handle duplicate filenames
-                                counter = 1
-                                while dest_path.exists():
-                                    dest_path = to_be_processed_dir / f"{base}_{counter}{ext}"
-                                    counter += 1
-                                shutil.copy2(image_path, dest_path)
-                                self.stdout.write(f"[NO FACES] Moved to to_be_processed: {fname}")
-                            else:
-                                self.stdout.write(f"[DRY][NO FACES] Would move to to_be_processed: {fname}")
-                            continue
-                    
-                    json_path = os.path.join(dirpath, base + ".json")
-                    doc = {}
-                    if os.path.exists(json_path):
-                        try:
-                            with open(json_path, "r", encoding="utf8") as fh:
-                                doc = json.load(fh)
-                        except Exception as e:
-                            self.stderr.write(f"Failed to parse JSON {json_path}: {e}")
-                    title = doc.get("title") or doc.get("description") or ""
-                    # photoTakenTime may be {"timestamp":"..."}
-                    taken_at = None
-                    pt = doc.get("photoTakenTime")
-                    if isinstance(pt, dict):
-                        ts = pt.get("timestamp")
-                        try:
-                            taken_at = datetime.utcfromtimestamp(int(ts))
-                        except Exception:
-                            taken_at = None
-                    lat = None
-                    lon = None
-                    geo = doc.get("geoData") or doc.get("location")
-                    if isinstance(geo, dict):
-                        lat = geo.get("latitude") or geo.get("latitudeE7")
-                        lon = geo.get("longitude") or geo.get("longitudeE7")
-                        try:
-                            if isinstance(lat, int) and abs(lat) > 1000:
-                                lat = lat / 1e7
-                            if isinstance(lon, int) and abs(lon) > 1000:
-                                lon = lon / 1e7
-                        except Exception:
-                            pass
-                    if dry:
-                        self.stdout.write(f"[DRY] {image_path} taken_at={taken_at} lat={lat} lon={lon}")
-                    else:
-                        photo = Photo.objects.create(
-                            original_path=image_path,
-                            title=title,
-                            description=doc.get("description") or "",
-                            taken_at=taken_at,
-                            latitude=lat,
-                            longitude=lon,
-                            json_metadata=doc or None,
-                        )
-                        count += 1
+        import_successful = True
+        try:
+            for dirpath, _, filenames in os.walk(root):
+                for fname in filenames:
+                    base, ext = os.path.splitext(fname)
+                    if ext.lower() in {".jpg", ".jpeg", ".png", ".heic", ".webp"}:
+                        image_path = os.path.join(dirpath, fname)
+                        
+                        # Check for faces if people_only mode is enabled
+                        has_people = True
+                        if people_only:
+                            has_people = self.has_faces(image_path)
+                            if not has_people:
+                                skipped_no_faces += 1
+                                # Move to to_be_processed folder
+                                if not dry:
+                                    dest_path = to_be_processed_dir / fname
+                                    # Handle duplicate filenames
+                                    counter = 1
+                                    while dest_path.exists():
+                                        dest_path = to_be_processed_dir / f"{base}_{counter}{ext}"
+                                        counter += 1
+                                    shutil.copy2(image_path, dest_path)
+                                    self.stdout.write(f"[NO FACES] Moved to to_be_processed: {fname}")
+                                else:
+                                    self.stdout.write(f"[DRY][NO FACES] Would move to to_be_processed: {fname}")
+                                continue
+                        
+                        json_path = os.path.join(dirpath, base + ".json")
+                        doc = {}
+                        if os.path.exists(json_path):
+                            try:
+                                with open(json_path, "r", encoding="utf8") as fh:
+                                    doc = json.load(fh)
+                            except Exception as e:
+                                self.stderr.write(f"Failed to parse JSON {json_path}: {e}")
+                        title = doc.get("title") or doc.get("description") or ""
+                        # photoTakenTime may be {"timestamp":"..."}
+                        taken_at = None
+                        pt = doc.get("photoTakenTime")
+                        if isinstance(pt, dict):
+                            ts = pt.get("timestamp")
+                            try:
+                                taken_at = datetime.utcfromtimestamp(int(ts))
+                            except Exception:
+                                taken_at = None
+                        lat = None
+                        lon = None
+                        geo = doc.get("geoData") or doc.get("location")
+                        if isinstance(geo, dict):
+                            lat = geo.get("latitude") or geo.get("latitudeE7")
+                            lon = geo.get("longitude") or geo.get("longitudeE7")
+                            try:
+                                if isinstance(lat, int) and abs(lat) > 1000:
+                                    lat = lat / 1e7
+                                if isinstance(lon, int) and abs(lon) > 1000:
+                                    lon = lon / 1e7
+                            except Exception:
+                                pass
+                        if dry:
+                            self.stdout.write(f"[DRY] {image_path} taken_at={taken_at} lat={lat} lon={lon}")
+                        else:
+                            photo = Photo.objects.create(
+                                original_path=image_path,
+                                title=title,
+                                description=doc.get("description") or "",
+                                taken_at=taken_at,
+                                latitude=lat,
+                                longitude=lon,
+                                json_metadata=doc or None,
+                            )
+                            count += 1
+        except Exception as e:
+            self.stderr.write(f"Error during import: {e}")
+            import_successful = False
         
         # Clean up and move zip to processed folder if applicable
         if is_zip and original_zip_path:
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
             
-            if not dry:
+            # Only move the zip if import was successful
+            if import_successful and not dry:
                 zip_filename = os.path.basename(original_zip_path)
                 dest_zip_path = processed_dir / zip_filename
                 # Handle duplicate filenames
@@ -172,8 +176,10 @@ class Command(BaseCommand):
                     counter += 1
                 shutil.move(original_zip_path, dest_zip_path)
                 self.stdout.write(f"Moved zip to processed: {dest_zip_path}")
-            else:
+            elif dry:
                 self.stdout.write(f"[DRY] Would move zip to processed folder")
+            elif not import_successful:
+                self.stdout.write(f"Import failed - zip file not moved: {original_zip_path}")
         
         if not dry:
             self.stdout.write(f"Imported {count} photos.")
