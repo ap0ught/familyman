@@ -193,8 +193,10 @@ class Command(BaseCommand):
                         if dry:
                             if existing_photo and duplicate_action == "replace":
                                 self.stdout.write(f"[DRY][REPLACE] Would update Photo {existing_photo.id}: {image_path}")
+                                replaced_duplicates += 1
                             else:
                                 self.stdout.write(f"[DRY] {image_path} taken_at={taken_at} lat={lat} lon={lon} hash={file_hash[:8]}...")
+                                count += 1
                         else:
                             if existing_photo and duplicate_action == "replace":
                                 # Update existing photo
