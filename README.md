@@ -21,9 +21,14 @@ python manage.py import_takeout /path/to/takeout.tar.gz
 ```
 
 The command supports:
-- Directories containing extracted Takeout data
-- Zip archives (.zip)
-- Compressed tar archives (.tgz or .tar.gz)
+- **Directories containing extracted Takeout data** - will also automatically extract any `.zip`, `.tgz`, or `.tar.gz` archives found in the directory
+- **Single archive files** - `.zip`, `.tgz`, or `.tar.gz`
+
+**Example:** If you have a directory with multiple Takeout archive files:
+```bash
+# This will automatically extract and import from all archives in the directory
+python manage.py import_takeout /path/to/import/
+```
 
 **People-Only Mode**: Import only photos with detected faces/people:
 ```bash
