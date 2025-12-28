@@ -53,6 +53,15 @@ class Command(BaseCommand):
         Uses filter='data' to extract only regular files and directories."""
         tar_file.extractall(extract_path, filter='data')
     
+    def get_archive_base_and_ext(self, archive_filename):
+        """Parse archive filename into base name and extension, handling .tar.gz specially."""
+        if archive_filename.endswith('.tar.gz'):
+            base_name = archive_filename[:-7]  # Remove .tar.gz
+            ext = '.tar.gz'
+        else:
+            base_name, ext = os.path.splitext(archive_filename)
+        return base_name, ext
+    
     def extract_archives_in_directory(self, directory, processed_dir, dry_run=False):
         """
         Find and extract all archive files in a directory.
@@ -320,11 +329,7 @@ class Command(BaseCommand):
                 archive_filename = os.path.basename(original_archive_path)
                 
                 # Determine base name and extension
-                if archive_filename.endswith('.tar.gz'):
-                    base_name = archive_filename[:-7]  # Remove .tar.gz
-                    ext = '.tar.gz'
-                else:
-                    base_name, ext = os.path.splitext(archive_filename)
+                base_name, ext = self.get_archive_base_and_ext(archive_filename)
                 
                 dest_archive_path = processed_dir / archive_filename
                 # Handle duplicate filenames
@@ -350,11 +355,7 @@ class Command(BaseCommand):
                 archive_filename = os.path.basename(archive_path)
                 
                 # Determine base name and extension
-                if archive_filename.endswith('.tar.gz'):
-                    base_name = archive_filename[:-7]  # Remove .tar.gz
-                    ext = '.tar.gz'
-                else:
-                    base_name, ext = os.path.splitext(archive_filename)
+                base_name, ext = self.get_archive_base_and_ext(archive_filename)
                 
                 dest_archive_path = processed_dir / archive_filename
                 # Handle duplicate filenames
