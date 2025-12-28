@@ -71,7 +71,7 @@ class Command(BaseCommand):
                     with zipfile.ZipFile(root, 'r') as zip_ref:
                         zip_ref.extractall(temp_dir)
                 elif is_tar:
-                    with tarfile.open(root, 'r:gz') as tar_ref:
+                    with tarfile.open(root, 'r:*') as tar_ref:
                         tar_ref.extractall(temp_dir)
                 root = temp_dir
             except Exception as e:
