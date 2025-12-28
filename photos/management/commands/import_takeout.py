@@ -49,13 +49,9 @@ class Command(BaseCommand):
         zip_file.extractall(extract_path)
     
     def safe_extract_tar(self, tar_file, extract_path):
-        """Safely extract a tar file, preventing path traversal attacks."""
-        for member in tar_file.getmembers():
-            # Normalize the path and check for path traversal
-            member_path = os.path.normpath(os.path.join(extract_path, member.name))
-            if not member_path.startswith(os.path.abspath(extract_path)):
-                raise ValueError(f"Attempted path traversal in tar file: {member.name}")
-        tar_file.extractall(extract_path)
+        """Safely extract a tar file, preventing path traversal attacks.
+        Uses filter='data' to extract only regular files and directories."""
+        tar_file.extractall(extract_path, filter='data')
     
     def extract_archives_in_directory(self, directory, processed_dir, dry_run=False):
         """
@@ -322,15 +318,18 @@ class Command(BaseCommand):
             # Only move the archive if import was successful
             if import_successful and not dry:
                 archive_filename = os.path.basename(original_archive_path)
+                
+                # Determine base name and extension
+                if archive_filename.endswith('.tar.gz'):
+                    base_name = archive_filename[:-7]  # Remove .tar.gz
+                    ext = '.tar.gz'
+                else:
+                    base_name, ext = os.path.splitext(archive_filename)
+                
                 dest_archive_path = processed_dir / archive_filename
                 # Handle duplicate filenames
                 counter = 1
                 while dest_archive_path.exists():
-                    base_name, ext = os.path.splitext(archive_filename)
-                    # Handle .tar.gz as a special case
-                    if archive_filename.endswith('.tar.gz'):
-                        base_name = archive_filename[:-7]  # Remove .tar.gz
-                        ext = '.tar.gz'
                     dest_archive_path = processed_dir / f"{base_name}_{counter}{ext}"
                     counter += 1
                 shutil.move(original_archive_path, dest_archive_path)
@@ -349,15 +348,18 @@ class Command(BaseCommand):
             # Move archive to processed folder if import was successful
             if import_successful and not dry:
                 archive_filename = os.path.basename(archive_path)
+                
+                # Determine base name and extension
+                if archive_filename.endswith('.tar.gz'):
+                    base_name = archive_filename[:-7]  # Remove .tar.gz
+                    ext = '.tar.gz'
+                else:
+                    base_name, ext = os.path.splitext(archive_filename)
+                
                 dest_archive_path = processed_dir / archive_filename
                 # Handle duplicate filenames
                 counter = 1
                 while dest_archive_path.exists():
-                    base_name, ext = os.path.splitext(archive_filename)
-                    # Handle .tar.gz as a special case
-                    if archive_filename.endswith('.tar.gz'):
-                        base_name = archive_filename[:-7]  # Remove .tar.gz
-                        ext = '.tar.gz'
                     dest_archive_path = processed_dir / f"{base_name}_{counter}{ext}"
                     counter += 1
                 shutil.move(archive_path, dest_archive_path)
