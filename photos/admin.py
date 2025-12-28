@@ -26,7 +26,7 @@ class PhotoAdmin(admin.ModelAdmin):
     list_filter = ("taken_at",)
     date_hierarchy = "taken_at"
     list_per_page = 50
-    readonly_fields = ("created_at", "location_display")
+    readonly_fields = ("created_at", "location_display", "people_list")
     
     fieldsets = (
         ("Basic Information", {
@@ -34,6 +34,10 @@ class PhotoAdmin(admin.ModelAdmin):
         }),
         ("Metadata", {
             "fields": ("taken_at", "latitude", "longitude", "location_display", "json_metadata"),
+            "classes": ("collapse",)
+        }),
+        ("People", {
+            "fields": ("people_list",),
             "classes": ("collapse",)
         }),
         ("System", {
@@ -46,7 +50,7 @@ class PhotoAdmin(admin.ModelAdmin):
         queryset = super().get_queryset(request)
         queryset = queryset.annotate(
             _face_count=models.Count("faces")
-        )
+        ).prefetch_related("people")
         return queryset
     
     @admin.display(description="Location")
@@ -64,6 +68,13 @@ class PhotoAdmin(admin.ModelAdmin):
         if obj.latitude and obj.longitude:
             return f"Latitude: {obj.latitude}, Longitude: {obj.longitude}"
         return "No location data"
+    
+    @admin.display(description="Tagged People")
+    def people_list(self, obj):
+        people = obj.people.all()
+        if people:
+            return ", ".join([person.name for person in people])
+        return "No people tagged"
 
 @admin.register(Face)
 class FaceAdmin(admin.ModelAdmin):
