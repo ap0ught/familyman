@@ -1,14 +1,23 @@
 from django.contrib import admin
+from django.db import models
 from .models import Photo, Person, Face
 
 @admin.register(Person)
 class PersonAdmin(admin.ModelAdmin):
     list_display = ("name", "photo_count")
     search_fields = ("name", "notes")
-    list_per_page = 50    
-    @admin.display(description="Photos")
+    list_per_page = 50
+    
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        queryset = queryset.annotate(
+            _photo_count=models.Count("faces__photo", distinct=True)
+        )
+        return queryset
+    
+    @admin.display(description="Photos", ordering="_photo_count")
     def photo_count(self, obj):
-        return obj.faces.count()
+        return obj._photo_count
 
 @admin.register(Photo)
 class PhotoAdmin(admin.ModelAdmin):
@@ -33,15 +42,22 @@ class PhotoAdmin(admin.ModelAdmin):
         }),
     )
     
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        queryset = queryset.annotate(
+            _face_count=models.Count("faces")
+        )
+        return queryset
+    
     @admin.display(description="Location")
     def location(self, obj):
         if obj.latitude and obj.longitude:
             return f"{obj.latitude:.4f}, {obj.longitude:.4f}"
         return "-"
     
-    @admin.display(description="Faces")
+    @admin.display(description="Faces", ordering="_face_count")
     def face_count(self, obj):
-        return obj.faces.count()
+        return obj._face_count
     
     @admin.display(description="Location Details")
     def location_display(self, obj):
