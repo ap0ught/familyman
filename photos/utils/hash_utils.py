@@ -18,5 +18,6 @@ def calculate_file_hash(file_path):
             for byte_block in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
-    except Exception:
+    except (IOError, OSError, PermissionError):
+        # Expected errors when reading files (missing, permission denied, etc.)
         return None
