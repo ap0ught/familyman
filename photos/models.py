@@ -4,6 +4,9 @@ class Person(models.Model):
     name = models.CharField(max_length=200, unique=True)
     notes = models.TextField(blank=True)
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -20,6 +23,9 @@ class Photo(models.Model):
     people = models.ManyToManyField(Person, through="Face", blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-taken_at", "-created_at"]
 
     def __str__(self):
         return f"Photo {self.id}: {self.title or self.original_path}"
