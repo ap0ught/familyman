@@ -39,6 +39,24 @@ class Command(BaseCommand):
             self.stderr.write(f"Continuing with import - defaulting to including this photo")
             return True  # Default to True on error to avoid losing photos
     
+    def safe_extract_zip(self, zip_file, extract_path):
+        """Safely extract a zip file, preventing path traversal attacks."""
+        for member in zip_file.namelist():
+            # Normalize the path and check for path traversal
+            member_path = os.path.normpath(os.path.join(extract_path, member))
+            if not member_path.startswith(os.path.abspath(extract_path)):
+                raise ValueError(f"Attempted path traversal in zip file: {member}")
+        zip_file.extractall(extract_path)
+    
+    def safe_extract_tar(self, tar_file, extract_path):
+        """Safely extract a tar file, preventing path traversal attacks."""
+        for member in tar_file.getmembers():
+            # Normalize the path and check for path traversal
+            member_path = os.path.normpath(os.path.join(extract_path, member.name))
+            if not member_path.startswith(os.path.abspath(extract_path)):
+                raise ValueError(f"Attempted path traversal in tar file: {member.name}")
+        tar_file.extractall(extract_path)
+    
     def extract_archives_in_directory(self, directory, processed_dir, dry_run=False):
         """
         Find and extract all archive files in a directory.
@@ -71,14 +89,20 @@ class Command(BaseCommand):
                 
                 if archive_path.endswith('.zip'):
                     with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                        zip_ref.extractall(temp_dir)
+                        self.safe_extract_zip(zip_ref, temp_dir)
                 elif archive_path.endswith('.tgz') or archive_path.endswith('.tar.gz'):
                     with tarfile.open(archive_path, 'r:*') as tar_ref:
-                        tar_ref.extractall(temp_dir)
+                        self.safe_extract_tar(tar_ref, temp_dir)
                 
                 extracted_archives.append((archive_path, temp_dir))
                 
-            except Exception as e:
+            except (zipfile.BadZipFile, tarfile.TarError) as e:
+                self.stderr.write(f"Failed to extract {archive_name}: {e}")
+                self.stderr.write(f"The archive may be corrupted or incomplete.")
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+                continue
+            except (ValueError, OSError) as e:
                 self.stderr.write(f"Failed to extract {archive_name}: {e}")
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
@@ -118,14 +142,19 @@ class Command(BaseCommand):
             try:
                 if is_zip:
                     with zipfile.ZipFile(root, 'r') as zip_ref:
-                        zip_ref.extractall(temp_dir)
+                        self.safe_extract_zip(zip_ref, temp_dir)
                 elif is_tar:
                     with tarfile.open(root, 'r:*') as tar_ref:
-                        tar_ref.extractall(temp_dir)
+                        self.safe_extract_tar(tar_ref, temp_dir)
                 root = temp_dir
-            except Exception as e:
+            except (zipfile.BadZipFile, tarfile.TarError) as e:
                 self.stderr.write(f"Failed to extract archive file: {e}")
                 self.stderr.write(f"The archive file may be corrupted or incomplete.")
+                if temp_dir and os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+                return
+            except (ValueError, OSError) as e:
+                self.stderr.write(f"Failed to extract archive file: {e}")
                 if temp_dir and os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
                 return
