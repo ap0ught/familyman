@@ -16,7 +16,14 @@ The `import_takeout` management command imports Google Takeout photos into the D
 ```bash
 python manage.py import_takeout /path/to/takeout --dry-run
 python manage.py import_takeout /path/to/takeout.zip
+python manage.py import_takeout /path/to/takeout.tgz
+python manage.py import_takeout /path/to/takeout.tar.gz
 ```
+
+The command supports:
+- Directories containing extracted Takeout data
+- Zip archives (.zip)
+- Compressed tar archives (.tgz or .tar.gz)
 
 **People-Only Mode**: Import only photos with detected faces/people:
 ```bash
@@ -26,7 +33,7 @@ python manage.py import_takeout /path/to/takeout.zip --people-only
 This mode uses face detection to filter photos:
 - Photos with faces are imported into the database
 - Photos without faces are moved to a `to_be_processed/` folder for later review
-- Processed zip files are moved to a `processed/` folder
+- Processed archive files are moved to a `processed/` folder
 
 **Duplicate Handling**: Control what happens when duplicate photos are detected (based on file content hash):
 ```bash

@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 import zipfile
+import tarfile
 import tempfile
 from django.core.management.base import BaseCommand, CommandError
 from photos.models import Photo
@@ -18,13 +19,13 @@ class Command(BaseCommand):
     help = "Import a Google Takeout Google Photos folder into the database."
 
     def add_arguments(self, parser):
-        parser.add_argument("takeout_root", help="Path to the root folder or zip file of the unpacked Google Takeout export")
+        parser.add_argument("takeout_root", help="Path to the root folder or archive file (.zip, .tgz, .tar.gz) of the unpacked Google Takeout export")
         parser.add_argument("--dry-run", action="store_true", help="Don't write to DB; only report")
         parser.add_argument("--people-only", action="store_true", help="Only import photos with detected faces/people")
         parser.add_argument("--duplicate-action", choices=["skip", "replace", "error"], default="skip", 
                             help="How to handle duplicate photos (default: skip). 'skip' ignores duplicates, 'replace' updates existing records, 'error' stops on duplicates")
-        parser.add_argument("--intake-dir", help="Directory for intake zip files (default: intake/)")
-        parser.add_argument("--processed-dir", help="Directory for processed zip files (default: processed/)")
+        parser.add_argument("--intake-dir", help="Directory for intake archive files (default: intake/)")
+        parser.add_argument("--processed-dir", help="Directory for processed archive files (default: processed/)")
         parser.add_argument("--to-be-processed-dir", help="Directory for photos without people (default: to_be_processed/)")
 
     def has_faces(self, image_path):
@@ -54,22 +55,28 @@ class Command(BaseCommand):
         for directory in [intake_dir, processed_dir, to_be_processed_dir]:
             directory.mkdir(parents=True, exist_ok=True)
         
-        # Check if the input is a zip file
+        # Check if the input is an archive file
         is_zip = root.endswith('.zip') and os.path.isfile(root)
+        is_tar = (root.endswith('.tgz') or root.endswith('.tar.gz')) and os.path.isfile(root)
+        is_archive = is_zip or is_tar
         temp_dir = None
-        original_zip_path = None
+        original_archive_path = None
         
-        if is_zip:
-            original_zip_path = root
+        if is_archive:
+            original_archive_path = root
             temp_dir = tempfile.mkdtemp(prefix="takeout_")
             self.stdout.write(f"Extracting {root} to {temp_dir}...")
             try:
-                with zipfile.ZipFile(root, 'r') as zip_ref:
-                    zip_ref.extractall(temp_dir)
+                if is_zip:
+                    with zipfile.ZipFile(root, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                elif is_tar:
+                    with tarfile.open(root, 'r:gz') as tar_ref:
+                        tar_ref.extractall(temp_dir)
                 root = temp_dir
             except Exception as e:
-                self.stderr.write(f"Failed to extract zip file: {e}")
-                self.stderr.write(f"The zip file may be corrupted or incomplete.")
+                self.stderr.write(f"Failed to extract archive file: {e}")
+                self.stderr.write(f"The archive file may be corrupted or incomplete.")
                 if temp_dir and os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
                 return
@@ -215,27 +222,31 @@ class Command(BaseCommand):
             self.stderr.write(f"Error during import: {e}")
             import_successful = False
         
-        # Clean up and move zip to processed folder if applicable
-        if is_zip and original_zip_path:
+        # Clean up and move archive to processed folder if applicable
+        if is_archive and original_archive_path:
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
             
-            # Only move the zip if import was successful
+            # Only move the archive if import was successful
             if import_successful and not dry:
-                zip_filename = os.path.basename(original_zip_path)
-                dest_zip_path = processed_dir / zip_filename
+                archive_filename = os.path.basename(original_archive_path)
+                dest_archive_path = processed_dir / archive_filename
                 # Handle duplicate filenames
                 counter = 1
-                while dest_zip_path.exists():
-                    base_name, ext = os.path.splitext(zip_filename)
-                    dest_zip_path = processed_dir / f"{base_name}_{counter}{ext}"
+                while dest_archive_path.exists():
+                    base_name, ext = os.path.splitext(archive_filename)
+                    # Handle .tar.gz as a special case
+                    if archive_filename.endswith('.tar.gz'):
+                        base_name = archive_filename[:-7]  # Remove .tar.gz
+                        ext = '.tar.gz'
+                    dest_archive_path = processed_dir / f"{base_name}_{counter}{ext}"
                     counter += 1
-                shutil.move(original_zip_path, dest_zip_path)
-                self.stdout.write(f"Moved zip to processed: {dest_zip_path}")
+                shutil.move(original_archive_path, dest_archive_path)
+                self.stdout.write(f"Moved archive to processed: {dest_archive_path}")
             elif dry:
-                self.stdout.write(f"[DRY] Would move zip to processed folder")
+                self.stdout.write(f"[DRY] Would move archive to processed folder")
             elif not import_successful:
-                self.stdout.write(f"Import failed - zip file not moved: {original_zip_path}")
+                self.stdout.write(f"Import failed - archive file not moved: {original_archive_path}")
         
         if not dry:
             self.stdout.write(f"Imported {count} photos.")
