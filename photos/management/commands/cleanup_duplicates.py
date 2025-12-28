@@ -1,7 +1,9 @@
 import hashlib
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
+from django.db import transaction
 from photos.models import Photo
+from photos.utils.hash_utils import calculate_file_hash
 
 
 class Command(BaseCommand):
@@ -13,19 +15,6 @@ class Command(BaseCommand):
                             help="Action to take on duplicates. 'report' only shows duplicates (default), 'delete' removes them keeping the oldest")
         parser.add_argument("--compute-hashes", action="store_true", 
                             help="Compute hashes for photos that don't have them yet")
-
-    def calculate_file_hash(self, file_path):
-        """Calculate SHA256 hash of a file for duplicate detection."""
-        sha256_hash = hashlib.sha256()
-        try:
-            with open(file_path, "rb") as f:
-                # Read in chunks to handle large files
-                for byte_block in iter(lambda: f.read(4096), b""):
-                    sha256_hash.update(byte_block)
-            return sha256_hash.hexdigest()
-        except Exception as e:
-            self.stderr.write(f"Error calculating hash for {file_path}: {e}")
-            return None
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
@@ -43,7 +32,7 @@ class Command(BaseCommand):
                 failed = 0
                 
                 for photo in photos_without_hash:
-                    file_hash = self.calculate_file_hash(photo.original_path)
+                    file_hash = calculate_file_hash(photo.original_path)
                     if file_hash:
                         if not dry_run:
                             photo.file_hash = file_hash
@@ -53,6 +42,9 @@ class Command(BaseCommand):
                             self.stdout.write(f"  Processed {computed}/{count_without_hash}...")
                     else:
                         failed += 1
+                        self.stderr.write(
+                            f"Failed to compute hash for Photo {photo.id}: {photo.original_path}"
+                        )
                 
                 if dry_run:
                     self.stdout.write(f"[DRY] Would compute hashes for {computed} photos ({failed} failed)")
@@ -93,17 +85,19 @@ class Command(BaseCommand):
 
         if action == "delete" and not dry_run:
             # Delete duplicates, keeping the oldest (first created)
+            # Wrap in transaction to ensure consistency
             deleted_count = 0
-            for dup in duplicate_hashes:
-                file_hash = dup['file_hash']
-                photos = Photo.objects.filter(file_hash=file_hash).order_by('created_at')
-                
-                # Keep the first (oldest), delete the rest
-                to_delete = list(photos[1:])
-                for photo in to_delete:
-                    self.stdout.write(f"  Deleting Photo {photo.id}: {photo.original_path}")
-                    photo.delete()
-                    deleted_count += 1
+            with transaction.atomic():
+                for dup in duplicate_hashes:
+                    file_hash = dup['file_hash']
+                    photos = Photo.objects.filter(file_hash=file_hash).order_by('created_at')
+                    
+                    # Keep the first (oldest), delete the rest
+                    to_delete = list(photos[1:])
+                    for photo in to_delete:
+                        self.stdout.write(f"  Deleting Photo {photo.id}: {photo.original_path}")
+                        photo.delete()
+                        deleted_count += 1
             
             self.stdout.write(f"\nDeleted {deleted_count} duplicate photos.")
         elif action == "delete" and dry_run:

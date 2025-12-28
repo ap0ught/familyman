@@ -52,11 +52,11 @@ python manage.py import_takeout /path/to/takeout.zip --duplicate-action error
 Remove duplicate photos that are already in the database:
 
 ```bash
+# IMPORTANT: For existing installations, first compute hashes for photos that don't have them
+python manage.py cleanup_duplicates --compute-hashes
+
 # Report duplicates without deleting
 python manage.py cleanup_duplicates --action report
-
-# Compute hashes for photos that don't have them yet
-python manage.py cleanup_duplicates --compute-hashes
 
 # Delete duplicates, keeping the oldest copy
 python manage.py cleanup_duplicates --action delete
@@ -64,6 +64,8 @@ python manage.py cleanup_duplicates --action delete
 # Dry run to see what would be deleted
 python manage.py cleanup_duplicates --action delete --dry-run
 ```
+
+**Note**: For existing installations with photos imported before the duplicate detection feature, you must run `--compute-hashes` first to calculate hashes for existing photos. After that, you can use `--action report` to see duplicates or `--action delete` to remove them.
 
 Overview workflow:
 1. Create a Google Photos export using Google Takeout and download/unpack it.

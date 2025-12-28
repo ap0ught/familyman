@@ -3,9 +3,9 @@ import json
 import shutil
 import zipfile
 import tempfile
-import hashlib
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from photos.models import Photo
+from photos.utils.hash_utils import calculate_file_hash
 from datetime import datetime
 from pathlib import Path
 
@@ -26,19 +26,6 @@ class Command(BaseCommand):
         parser.add_argument("--intake-dir", help="Directory for intake zip files (default: intake/)")
         parser.add_argument("--processed-dir", help="Directory for processed zip files (default: processed/)")
         parser.add_argument("--to-be-processed-dir", help="Directory for photos without people (default: to_be_processed/)")
-
-    def calculate_file_hash(self, file_path):
-        """Calculate SHA256 hash of a file for duplicate detection."""
-        sha256_hash = hashlib.sha256()
-        try:
-            with open(file_path, "rb") as f:
-                # Read in chunks to handle large files
-                for byte_block in iter(lambda: f.read(4096), b""):
-                    sha256_hash.update(byte_block)
-            return sha256_hash.hexdigest()
-        except Exception as e:
-            self.stderr.write(f"Error calculating hash for {file_path}: {e}")
-            return None
 
     def has_faces(self, image_path):
         """Detect if an image has any faces/people in it."""
@@ -114,6 +101,13 @@ class Command(BaseCommand):
                     if ext.lower() in {".jpg", ".jpeg", ".png", ".heic", ".webp"}:
                         image_path = os.path.join(dirpath, fname)
                         
+                        # Calculate file hash for duplicate detection BEFORE face detection
+                        # This ensures all photos get hashes, even if they fail face detection
+                        file_hash = calculate_file_hash(image_path)
+                        if not file_hash:
+                            self.stderr.write(f"Skipping {fname} due to hash calculation error")
+                            continue
+                        
                         # Check for faces if people_only mode is enabled
                         has_people = True
                         if people_only:
@@ -134,12 +128,6 @@ class Command(BaseCommand):
                                     self.stdout.write(f"[DRY][NO FACES] Would move to to_be_processed: {fname}")
                                 continue
                         
-                        # Calculate file hash for duplicate detection
-                        file_hash = self.calculate_file_hash(image_path)
-                        if not file_hash:
-                            self.stderr.write(f"Skipping {fname} due to hash calculation error")
-                            continue
-                        
                         # Check for duplicates in database
                         existing_photo = Photo.objects.filter(file_hash=file_hash).first()
                         
@@ -152,9 +140,10 @@ class Command(BaseCommand):
                                     self.stdout.write(f"[DUPLICATE] Skipping: {fname} (already in DB as Photo {existing_photo.id})")
                                 continue
                             elif duplicate_action == "error":
-                                self.stderr.write(f"Error: Duplicate photo found: {fname} (already in DB as Photo {existing_photo.id})")
-                                import_successful = False
-                                break
+                                error_msg = f"Error: Duplicate photo found: {fname} (already in DB as Photo {existing_photo.id})"
+                                self.stderr.write(error_msg)
+                                # Raise exception to stop all processing
+                                raise CommandError(error_msg)
                             # If replace, we'll update the existing photo below
                         
                         json_path = os.path.join(dirpath, base + ".json")
@@ -199,6 +188,7 @@ class Command(BaseCommand):
                             if existing_photo and duplicate_action == "replace":
                                 # Update existing photo
                                 existing_photo.original_path = image_path
+                                existing_photo.file_hash = file_hash
                                 existing_photo.title = title
                                 existing_photo.description = doc.get("description") or ""
                                 existing_photo.taken_at = taken_at
@@ -210,7 +200,7 @@ class Command(BaseCommand):
                                 self.stdout.write(f"[REPLACE] Updated Photo {existing_photo.id}: {fname}")
                             else:
                                 # Create new photo
-                                photo = Photo.objects.create(
+                                Photo.objects.create(
                                     original_path=image_path,
                                     file_hash=file_hash,
                                     title=title,
