@@ -10,6 +10,7 @@ class Person(models.Model):
 class Photo(models.Model):
     # Store path to the original file (relative or absolute). Optionally you can copy into MEDIA_ROOT.
     original_path = models.TextField(help_text="Path to the image file on disk")
+    file_hash = models.CharField(max_length=64, blank=True, db_index=True, help_text="SHA256 hash of file content for duplicate detection")
     title = models.CharField(max_length=500, blank=True)
     description = models.TextField(blank=True)
     taken_at = models.DateTimeField(null=True, blank=True)

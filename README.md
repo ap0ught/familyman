@@ -28,12 +28,46 @@ This mode uses face detection to filter photos:
 - Photos without faces are moved to a `to_be_processed/` folder for later review
 - Processed zip files are moved to a `processed/` folder
 
+**Duplicate Handling**: Control what happens when duplicate photos are detected (based on file content hash):
+```bash
+# Skip duplicates (default behavior)
+python manage.py import_takeout /path/to/takeout.zip --duplicate-action skip
+
+# Replace existing photos with new metadata
+python manage.py import_takeout /path/to/takeout.zip --duplicate-action replace
+
+# Stop with error on duplicates
+python manage.py import_takeout /path/to/takeout.zip --duplicate-action error
+```
+
 **Options**:
 - `--dry-run` — Preview what would be imported without making changes
 - `--people-only` — Only import photos with detected faces
+- `--duplicate-action` — How to handle duplicates: `skip` (default), `replace`, or `error`
 - `--intake-dir` — Directory for intake zip files (default: `intake/`)
 - `--processed-dir` — Directory for processed zip files (default: `processed/`)
 - `--to-be-processed-dir` — Directory for photos without people (default: `to_be_processed/`)
+
+### Cleanup Duplicates Command
+Remove duplicate photos that are already in the database:
+
+```bash
+# IMPORTANT: For existing installations, first compute hashes for photos that don't have them
+python manage.py cleanup_duplicates --compute-hashes
+
+# Report duplicates without deleting
+python manage.py cleanup_duplicates --action report
+
+# Delete duplicates, keeping the copy with most Face associations
+python manage.py cleanup_duplicates --action delete
+
+# Dry run to see what would be deleted
+python manage.py cleanup_duplicates --action delete --dry-run
+```
+
+**Notes**: 
+- For existing installations with photos imported before the duplicate detection feature, you must run `--compute-hashes` first to calculate hashes for existing photos. After that, you can use `--action report` to see duplicates or `--action delete` to remove them.
+- When deleting duplicates, the command keeps the photo with the most Face associations (or the oldest if tied). The command only removes database records; **physical image files on disk are not deleted** and may need manual cleanup if desired.
 
 Overview workflow:
 1. Create a Google Photos export using Google Takeout and download/unpack it.
