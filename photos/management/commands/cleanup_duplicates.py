@@ -78,12 +78,25 @@ class Command(BaseCommand):
                 photos = Photo.objects.filter(file_hash=file_hash).order_by('created_at')
                 
                 self.stdout.write(f"\n  Hash {file_hash[:16]}... has {count} copies:")
-                for i, photo in enumerate(photos):
+                
+                # Annotate with face counts to show what would be kept
+                photos_list = list(photos)
+                photos_with_counts = []
+                for photo in photos_list:
+                    face_count = photo.faces.count()
+                    photos_with_counts.append((photo, face_count))
+                
+                # Sort by: most faces first, then oldest created_at (matches deletion logic)
+                photos_with_counts.sort(key=lambda x: (-x[1], x[0].created_at))
+                
+                for i, (photo, face_count) in enumerate(photos_with_counts):
                     marker = "[KEEP]" if i == 0 else "[DELETE]"
-                    self.stdout.write(f"    {marker} Photo {photo.id}: {photo.original_path} (created: {photo.created_at})")
+                    self.stdout.write(f"    {marker} Photo {photo.id}: {photo.original_path} (created: {photo.created_at}, faces: {face_count})")
+
 
         if action == "delete" and not dry_run:
-            # Delete duplicates, keeping the oldest (first created)
+            # Delete duplicates, prioritizing preservation of photos with Face associations
+            # Note: This only deletes database records. Physical files on disk are not removed.
             # Wrap in transaction to ensure consistency
             deleted_count = 0
             with transaction.atomic():
@@ -91,13 +104,29 @@ class Command(BaseCommand):
                     file_hash = dup['file_hash']
                     photos = Photo.objects.filter(file_hash=file_hash).order_by('created_at')
                     
-                    # Keep the first (oldest), delete the rest
-                    to_delete = list(photos[1:])
-                    for photo in to_delete:
-                        self.stdout.write(f"  Deleting Photo {photo.id}: {photo.original_path}")
-                        photo.delete()
-                        deleted_count += 1
+                    # Determine which photo to keep based on Face associations and metadata
+                    photos_list = list(photos)
+                    if photos_list:
+                        # Annotate each photo with face count
+                        photos_with_counts = []
+                        for photo in photos_list:
+                            face_count = photo.faces.count()
+                            photos_with_counts.append((photo, face_count))
+                        
+                        # Sort by: most faces first, then oldest created_at
+                        photos_with_counts.sort(key=lambda x: (-x[1], x[0].created_at))
+                        
+                        # Keep the first (most faces, or oldest if tied)
+                        to_keep = photos_with_counts[0][0]
+                        to_delete = [p for p, _ in photos_with_counts[1:]]
+                        
+                        for photo in to_delete:
+                            self.stdout.write(f"  Deleting Photo {photo.id}: {photo.original_path}")
+                            photo.delete()
+                            deleted_count += 1
             
             self.stdout.write(f"\nDeleted {deleted_count} duplicate photos.")
+            self.stdout.write("Note: Physical image files were not deleted and may need manual cleanup.")
         elif action == "delete" and dry_run:
             self.stdout.write(f"\n[DRY] Would delete {total_duplicates} duplicate photos.")
+            self.stdout.write("\nNote: Physical image files would not be deleted and may need manual cleanup.")

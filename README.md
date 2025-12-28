@@ -58,14 +58,16 @@ python manage.py cleanup_duplicates --compute-hashes
 # Report duplicates without deleting
 python manage.py cleanup_duplicates --action report
 
-# Delete duplicates, keeping the oldest copy
+# Delete duplicates, keeping the copy with most Face associations
 python manage.py cleanup_duplicates --action delete
 
 # Dry run to see what would be deleted
 python manage.py cleanup_duplicates --action delete --dry-run
 ```
 
-**Note**: For existing installations with photos imported before the duplicate detection feature, you must run `--compute-hashes` first to calculate hashes for existing photos. After that, you can use `--action report` to see duplicates or `--action delete` to remove them.
+**Notes**: 
+- For existing installations with photos imported before the duplicate detection feature, you must run `--compute-hashes` first to calculate hashes for existing photos. After that, you can use `--action report` to see duplicates or `--action delete` to remove them.
+- When deleting duplicates, the command keeps the photo with the most Face associations (or the oldest if tied). The command only removes database records; **physical image files on disk are not deleted** and may need manual cleanup if desired.
 
 Overview workflow:
 1. Create a Google Photos export using Google Takeout and download/unpack it.
